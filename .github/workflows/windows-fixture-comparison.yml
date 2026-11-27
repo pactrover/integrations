@@ -1,0 +1,51 @@
+name: Compare the Windows fixtures from integrations PR 30
+
+on:
+  push:
+    branches: [verify/windows-ci-30-c97-eada]
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    name: Windows fixtures (${{ matrix.label }})
+    runs-on: windows-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: main c97ef77
+            ref: c97ef7753c4a8ecedccd086cdf928533ab87dd38
+          - label: PR merge 1533571
+            ref: 153357164f171d4940e962e771a33b2f46d44e14
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: attocash/integrations
+          ref: ${{ matrix.ref }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24.22.3'
+      - name: Verify the checked-out revision
+        env:
+          EXPECTED_SHA: ${{ matrix.ref }}
+        run: |
+          $actual = git rev-parse HEAD
+          if ($LASTEXITCODE -ne 0 -or $actual -ne $env:EXPECTED_SHA) { throw "Unexpected source revision: $actual" }
+          Write-Output "Source revision: $actual"
+          node --version
+      - run: npm ci
+        timeout-minutes: 4
+      - run: npm run build
+        timeout-minutes: 4
+      - name: Run all four MCP fixture files from the failing Windows jobs
+        timeout-minutes: 3
+        run: >-
+          node --test --test-concurrency=1 --test-reporter=spec
+          atto-mcp/test/configuration.test.mjs
+          atto-mcp/test/doctor.test.mjs
+          atto-mcp/test/interfaces.test.mjs
+          atto-mcp/test/representative.test.mjs
